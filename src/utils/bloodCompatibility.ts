@@ -1,4 +1,4 @@
-import { BloodGroup, DonorProfile, LocationCoords } from '../types';
+import { BloodGroup, DonorProfile, LocationCoords } from '../types/index.ts';
 
 /**
  * Standard Red Blood Cell (RBC) compatibility mapping.

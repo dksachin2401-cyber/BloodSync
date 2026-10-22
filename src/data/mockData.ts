@@ -10,7 +10,7 @@ import {
   NotificationItem,
   AuditLogItem,
   DonationAppointment,
-} from '../types';
+} from '../types/index.ts';
 
 export const INITIAL_DONORS: DonorProfile[] = [
   {
