@@ -1,0 +1,6 @@
+{
+  "name": "BloodSync - Emergency Coordination & Demand Prediction",
+  "description": "Intelligent Blood Emergency Coordination and Demand Prediction System featuring multi-criteria compatibility matching and ML-driven shortage forecasting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

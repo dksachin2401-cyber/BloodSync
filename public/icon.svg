@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#991b1b" />
+      <stop offset="100%" stop-color="#dc2626" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.3" />
+    </filter>
+  </defs>
+  <!-- Background with subtle corner radius -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  
+  <!-- Stylized Blood Drop & Heart Emblem -->
+  <g filter="url(#shadow)">
+    <!-- Blood Drop Shape -->
+    <path d="M256 96 C256 96 160 220 160 300 C160 353 203 396 256 396 C309 396 352 353 352 300 C352 220 256 96 256 96 Z" fill="#ffffff" />
+    <!-- Inner Healthcare Cross -->
+    <path d="M236 240 H276 V280 H316 V320 H276 V360 H236 V320 H196 V280 H236 Z" fill="#dc2626" />
+  </g>
+</svg>

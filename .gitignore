@@ -1,0 +1,12 @@
+node_modules/
+build/
+dist/
+dev-dist/
+.vercel
+latest_project/
+backend/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
