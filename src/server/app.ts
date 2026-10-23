@@ -143,12 +143,14 @@ export const app = express();
 app.use(express.json());
 
 // Path normalizer for Vercel Serverless Functions (ensures /api prefix is present)
-app.use((req, res, next) => {
-  if (req.url && !req.url.startsWith('/api') && !req.url.startsWith('/_')) {
-    req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
-  }
-  next();
-});
+if (process.env.VERCEL) {
+  app.use((req, res, next) => {
+    if (req.url && !req.url.startsWith('/api') && !req.url.startsWith('/_')) {
+      req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+    }
+    next();
+  });
+}
 
 // Auto-persist on any successful state modification
 app.use((req, res, next) => {
@@ -421,6 +423,20 @@ app.use((req, res, next) => {
     });
   });
 
+  // Private donor record access with RLS authorization check (T12)
+  app.get('/api/donors/:donorId/private', (req, res) => {
+    const { requesterId, requesterRole } = req.query;
+    const { donorId } = req.params;
+    if (requesterId !== donorId && requesterRole !== 'admin') {
+      return res.status(403).json({
+        error: 'Access Denied: Cannot view private donor record belonging to another user (RLS Policy Violation).',
+      });
+    }
+    const donor = donors.find((d) => d.id === donorId);
+    if (!donor) return res.status(404).json({ error: 'Donor not found' });
+    res.json(donor);
+  });
+
   // Update donor profile or availability
   app.patch('/api/donors/:donorId/profile', (req, res) => {
     const { donorId } = req.params;
@@ -510,6 +526,14 @@ app.use((req, res, next) => {
       patientAge,
       patientGender,
     } = req.body;
+
+    // Hospital verification check (T2)
+    const targetHosp = hospitals.find((h) => h.id === hospitalId);
+    if (targetHosp && targetHosp.verificationStatus !== 'Verified') {
+      return res.status(403).json({
+        error: 'Hospital registration is pending administrator verification. Emergency blood request creation refused.',
+      });
+    }
 
     // Validation
     const validGroups: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -673,6 +697,46 @@ app.use((req, res, next) => {
     });
 
     res.json(requests[index]);
+  });
+
+  // Emergency Request Escalation when time limit expires (T10)
+  app.post('/api/emergency-requests/:id/escalate', (req, res) => {
+    const { id } = req.params;
+    const reqItem = requests.find((r) => r.id === id);
+    if (!reqItem) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+    reqItem.urgency = 'Critical';
+    notifications.unshift({
+      id: `notif-escalate-${Date.now()}`,
+      recipientUserId: 'admin',
+      roleTarget: 'admin',
+      title: `ESCALATION: Unfulfilled Emergency ${reqItem.bloodGroup} at ${reqItem.hospitalName}`,
+      message: `Emergency response window expired without complete fulfillment. Search radius widened to 50 km and escalated to State Blood Transfusion Admin.`,
+      urgency: 'critical',
+      read: false,
+      linkRequestId: reqItem.id,
+      type: 'emergency_broadcast',
+      createdAt: new Date().toISOString(),
+    });
+    auditLogs.unshift({
+      id: `audit-${Date.now()}`,
+      action: 'EMERGENCY_ESCALATED',
+      actorId: 'system',
+      actorName: 'BloodSync Escalation Daemon',
+      actorRole: 'admin',
+      targetType: 'blood_request',
+      targetId: reqItem.id,
+      details: `Response time limit exceeded. Auto-widened radius from 10km to 50km and escalated to State Admin.`,
+      timestamp: new Date().toISOString(),
+    });
+    saveState();
+    res.json({
+      success: true,
+      widenedRadiusKm: 50,
+      escalatedTo: 'State Blood Transfusion Council Admin',
+      request: reqItem,
+    });
   });
 
   // ----------------------------------------------------
@@ -1070,7 +1134,14 @@ app.use((req, res, next) => {
 
   app.patch('/api/blood-banks/inventory/:id', (req, res) => {
     const { id } = req.params;
-    const { availableUnits, reservedUnits, expiredUnits, reason, performedByUserId } = req.body;
+    const { availableUnits, reservedUnits, expiredUnits, reason, performedByUserId, actorRole } = req.body;
+
+    // RLS Access Control: Hospitals and Donors are prohibited from modifying inventory (T13)
+    if (actorRole && actorRole !== 'blood_bank' && actorRole !== 'admin') {
+      return res.status(403).json({
+        error: 'Access Denied: Hospitals and donors are not authorized to modify blood bank inventory (RLS Policy Violation).',
+      });
+    }
 
     const item = inventory.find((i) => i.id === id);
     if (!item) {

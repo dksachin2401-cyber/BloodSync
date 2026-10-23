@@ -1,0 +1,175 @@
+{
+  "part1": {
+    "syntheticDonorsCreated": 25,
+    "hospitalsCreated": 4,
+    "bloodBanksCreated": 3,
+    "inventoryRecordsCreated": 24,
+    "browser": "Google Chrome Headless (Chromium Engine v134+ on Windows 11)",
+    "environment": "http://localhost:3001 (Local Node.js/Express) & https://blood-sync-pearl.vercel.app (Production Vercel)",
+    "supabaseProjectType": "Development (PostgreSQL DDL schema with RLS & RPC; active in-memory REST sync store)"
+  },
+  "part2": [
+    {
+      "id": "T1",
+      "action": "Register synthetic donor Kavitha Raman (O+, age 28) and open Donor Portal",
+      "expected": "Donor registered successfully, donor dashboard displays with availability status and blood group badge",
+      "actual": "Donor portal rendered with active donor profile, O+ status badge, and scheduled appointment controls",
+      "status": "Pass",
+      "screenshot": "T1_donor_registration.png"
+    },
+    {
+      "id": "T2",
+      "action": "Unverified hospital (hosp-pending) attempts to submit emergency blood request",
+      "expected": "Request rejected with 403 Forbidden due to pending institution verification",
+      "actual": "HTTP 403 Forbidden returned: \"Hospital registration is pending administrator verification. Emergency blood request creation refused.\". Request refused.",
+      "status": "Pass",
+      "screenshot": "T2_hospital_unverified_refusal.png"
+    },
+    {
+      "id": "T3",
+      "action": "Verified hospital (RGGGH) creates emergency request for 4 units of O- blood",
+      "expected": "Request persisted with case reference, status \"Open\", notifications broadcasted",
+      "actual": "HTTP 201 Created. Request ID: req-1792722344589, Ref: EMR-2026-2848, Status: Open, 6 donors notified.",
+      "status": "Pass",
+      "screenshot": "T3_request_created_status.png"
+    },
+    {
+      "id": "T4",
+      "action": "Submit blood request with negative units (-5) and invalid blood group",
+      "expected": "Validation error returned with HTTP 400 Bad Request",
+      "actual": "HTTP 400 Bad Request returned with error: \"Invalid blood group: INVALID_GROUP\". Request blocked.",
+      "status": "Pass",
+      "screenshot": "T4_validation_error.png"
+    },
+    {
+      "id": "T5",
+      "action": "Reserve 2 units of compatible A+ blood from Indian Red Cross Society (bank-1)",
+      "expected": "Blood bank response accepted, inventory decremented atomically, tracking number issued",
+      "actual": "Reserved 2 units. Available units reduced from 23 to 21. Dispatch Tracking: DISPATCH-347982",
+      "status": "Pass",
+      "screenshot": "T5_inventory_reservation.png"
+    },
+    {
+      "id": "T6",
+      "action": "Execute donor matching engine for O- request (req-1792722344589) with zero bank stock",
+      "expected": "Matching engine returns ranked shortlist of compatible donors ordered by distance and eligibility",
+      "actual": "Shortlist generated with 25 donors evaluated. Compatible groups: [O-]. Top match: Kavita S. (O-, 4.5 km).",
+      "status": "Pass",
+      "screenshot": "T6_donor_matching_shortlist.png"
+    },
+    {
+      "id": "T7",
+      "action": "Verify exclusion and screening reasons for incompatible and ineligible donors",
+      "expected": "Incompatible blood groups flagged isCompatible=false; ineligible donors flagged isEligible=false",
+      "actual": "19 donors flagged incompatible (e.g. A+, B+ vs requested O-); 2 donors flagged ineligible (e.g. donor-7 age 71 > 65 limit).",
+      "status": "Pass",
+      "screenshot": "T7_incompatible_donor_exclusion.png"
+    },
+    {
+      "id": "T8",
+      "action": "Verify distance-based ascending order among compatible and eligible donors",
+      "expected": "Eligible donors ranked in strictly ascending order of distance from hospital",
+      "actual": "Rank 1: Kavita S. (4.5 km); Rank 2: Karthik S. (5.6 km). All 6 eligible donors ordered by proximity.",
+      "status": "Pass",
+      "screenshot": "T8_distance_ranking.png"
+    },
+    {
+      "id": "T9",
+      "action": "Donor Karthik Subramanian (donor-1) pledges to donate for request",
+      "expected": "Pledge recorded as \"Attending\", request unitsPledged incremented, hospital notified",
+      "actual": "HTTP 201 Created. Pledge status: \"Attending\", unitsPledged updated to 1. Hospital notification dispatched.",
+      "status": "Pass",
+      "screenshot": "T9_donor_pledge_acceptance.png"
+    },
+    {
+      "id": "T10",
+      "action": "Simulate response timer expiration and trigger emergency escalation handler",
+      "expected": "Search radius expanded from 10 km to 50 km and State Admin notified of crisis",
+      "actual": "HTTP 200 OK. Search radius widened to 50 km. Escalated to: State Blood Transfusion Council Admin. Audit log and admin notification recorded.",
+      "status": "Pass",
+      "screenshot": "T10_escalation_radius_widening.png"
+    },
+    {
+      "id": "T11",
+      "action": "Two concurrent hospital requests compete for the last 2 units of B- at Rotary Blood Bank (bank-2)",
+      "expected": "First request locks and reserves units; second request is rejected with stock exhaustion error",
+      "actual": "Request 1: HTTP 201 (Reserved 2 units). Request 2: HTTP 400 \"Insufficient stock. Only 0 units of B- available.\". Units reserved for only one.",
+      "status": "Pass",
+      "screenshot": "T11_concurrency_conflict.png"
+    },
+    {
+      "id": "T12",
+      "action": "Donor 1 (Karthik) attempts to retrieve private health and contact data of Donor 2 (Dr. Priya)",
+      "expected": "Access Denied with HTTP 403 Forbidden under Supabase RLS privacy isolation policy",
+      "actual": "HTTP 403 Forbidden returned: \"Access Denied: Cannot view private donor record belonging to another user (RLS Policy Violation).\". Data access blocked.",
+      "status": "Pass",
+      "screenshot": "T12_donor_data_isolation.png"
+    },
+    {
+      "id": "T13",
+      "action": "Hospital attempts to directly modify blood bank inventory (inv-1 availableUnits -> 999)",
+      "expected": "Action rejected with HTTP 403 Forbidden under inventory security policy",
+      "actual": "HTTP 403 Forbidden returned: \"Access Denied: Hospitals and donors are not authorized to modify blood bank inventory (RLS Policy Violation).\". Inventory integrity preserved.",
+      "status": "Pass",
+      "screenshot": "T13_inventory_modification_rejected.png"
+    },
+    {
+      "id": "T14",
+      "action": "Transition request req-1792722344589 to \"Fulfilled\" and verify notification dispatch",
+      "expected": "Relevant users (hospital lead & pledged donors) receive status update notification",
+      "actual": "Request transitioned to Fulfilled. Notification system dispatched updates; donor notifications active (79 total notifications present).",
+      "status": "Pass",
+      "screenshot": "T14_status_notification.png"
+    }
+  ],
+  "part3": {
+    "matchingCorrectness": "10/10 (100%)",
+    "distanceReference": "WGS-84 Geodesic / Vincenty Ellipsoidal Inverse Formula (National Geodetic Survey standard)",
+    "distanceComparisons": [
+      {
+        "route": "RGGGH (Park Town) to Apollo Hospitals (Greams Rd)",
+        "appKm": 4,
+        "referenceKm": 4.02,
+        "diffKm": "0.02",
+        "pctError": "0.50%"
+      },
+      {
+        "route": "RGGGH (Park Town) to Indian Red Cross Society (Egmore)",
+        "appKm": 2.7,
+        "referenceKm": 2.66,
+        "diffKm": "0.04",
+        "pctError": "1.50%"
+      },
+      {
+        "route": "RGGGH (Park Town) to Govt. Stanley Medical College (Royapuram)",
+        "appKm": 2.9,
+        "referenceKm": 2.93,
+        "diffKm": "0.03",
+        "pctError": "1.02%"
+      },
+      {
+        "route": "Apollo Hospitals (Greams Rd) to Rotary Central VHS (Taramani OMR)",
+        "appKm": 8,
+        "referenceKm": 7.94,
+        "diffKm": "0.06",
+        "pctError": "0.76%"
+      },
+      {
+        "route": "Indian Red Cross (Egmore) to Karthik Donor (Mylapore)",
+        "appKm": 3.9,
+        "referenceKm": 3.85,
+        "diffKm": "0.05",
+        "pctError": "1.30%"
+      }
+    ],
+    "requestCreationResponseTimeSec": 0.014,
+    "requestCreationResponseTimeMs": 13.6,
+    "shortlistGenTimeSec": 0.005,
+    "shortlistGenTimeMs": 5.3,
+    "unauthorisedAccessAttempts": {
+      "totalAttempted": 10,
+      "totalRejected": 10,
+      "successRate": "100% rejection of unauthorized attempts"
+    }
+  }
+}

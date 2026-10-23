@@ -83,6 +83,10 @@ export const HospitalPortal: React.FC<HospitalPortalProps> = ({ initialRequestId
 
   const handleCreateRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (hospital.verificationStatus && hospital.verificationStatus !== 'Verified') {
+      alert('Hospital registration is pending administrator verification. Emergency blood request creation refused.');
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await api.createEmergencyRequest({
@@ -150,8 +154,12 @@ export const HospitalPortal: React.FC<HospitalPortalProps> = ({ initialRequestId
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold">{hospital.hospitalName}</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-800">
-                Verified Trauma Center
+              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                hospital.verificationStatus === 'Verified'
+                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                  : 'bg-amber-950 text-amber-400 border border-amber-800'
+              }`}>
+                {hospital.verificationStatus === 'Verified' ? 'Verified Trauma Center' : 'Pending Verification'}
               </span>
             </div>
             <p className="text-xs text-neutral-400 mt-1 flex items-center gap-2">
@@ -161,12 +169,19 @@ export const HospitalPortal: React.FC<HospitalPortalProps> = ({ initialRequestId
           </div>
         </div>
 
-        <button
-          onClick={() => setIsCreating(true)}
-          className="px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-lg shadow-red-600/30 flex items-center gap-2 transition-transform hover:scale-105 cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" /> Create Emergency Blood Requisition
-        </button>
+        {hospital.verificationStatus === 'Verified' ? (
+          <button
+            onClick={() => setIsCreating(true)}
+            className="px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-lg shadow-red-600/30 flex items-center gap-2 transition-transform hover:scale-105 cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" /> Create Emergency Blood Requisition
+          </button>
+        ) : (
+          <div className="px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Verification Pending: Request Creation Locked</span>
+          </div>
+        )}
       </div>
 
       {/* KPI Stats */}
