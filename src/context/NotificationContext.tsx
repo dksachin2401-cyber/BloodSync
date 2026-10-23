@@ -1,7 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { NotificationItem } from '../types';
+import { NotificationItem, UserRole } from '../types';
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
+
+export interface AddNotificationInput {
+  id?: string;
+  recipientUserId?: string;
+  roleTarget?: UserRole;
+  title: string;
+  message: string;
+  urgency?: 'low' | 'normal' | 'urgent' | 'critical';
+  linkRequestId?: string;
+  actionUrl?: string;
+  type: 'emergency_broadcast' | 'pledge_update' | 'bank_response' | 'low_stock' | 'request_status' | 'verification' | 'system';
+}
 
 interface NotificationContextType {
   notifications: NotificationItem[];
@@ -9,6 +21,7 @@ interface NotificationContextType {
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
+  addNotification: (item: AddNotificationInput) => void;
   latestUrgentAlert: NotificationItem | null;
   dismissUrgentAlert: () => void;
 }
@@ -71,6 +84,25 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   };
 
+  const addNotification = (item: AddNotificationInput) => {
+    const newItem: NotificationItem = {
+      id: item.id || `notif-${Date.now()}`,
+      recipientUserId: item.recipientUserId || currentUser.id,
+      roleTarget: item.roleTarget || currentRole,
+      title: item.title,
+      message: item.message,
+      urgency: item.urgency || 'urgent',
+      read: false,
+      linkRequestId: item.linkRequestId,
+      actionUrl: item.actionUrl,
+      type: item.type,
+      createdAt: new Date().toISOString(),
+    };
+    setNotifications((prev) => [newItem, ...prev]);
+    setUnreadCount((prev) => prev + 1);
+    setLatestUrgentAlert(newItem);
+  };
+
   const dismissUrgentAlert = () => {
     if (latestUrgentAlert) {
       markAsRead(latestUrgentAlert.id);
@@ -86,6 +118,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         markAsRead,
         markAllAsRead,
         refreshNotifications,
+        addNotification,
         latestUrgentAlert,
         dismissUrgentAlert,
       }}

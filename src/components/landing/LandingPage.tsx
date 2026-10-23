@@ -30,6 +30,8 @@ import { RBC_COMPATIBILITY_RULES } from '../../utils/bloodCompatibility';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { ChennaiDemandTrendsDashboard } from '../analytics/ChennaiDemandTrendsDashboard';
+import { SimulatedMap } from '../map/SimulatedMap';
+import { FourWayCoordinationDemo } from '../demo/FourWayCoordinationDemo';
 
 interface LandingPageProps {
   onNavigate: (tab: string) => void;
@@ -329,6 +331,36 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
           </div>
         </div>
+      </section>
+
+      {/* 3B. Chennai Metropolitan Live Telemetry Map */}
+      <section id="chennai-network-map" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+        <div className="text-center max-w-3xl mx-auto mb-8">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 mb-3 border border-blue-200 dark:border-blue-900/60">
+            <MapPin className="w-3.5 h-3.5 text-blue-600" />
+            <span>Interactive Spatial Telemetry</span>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 dark:text-white">
+            Live Chennai Facility & Donor Map
+          </h2>
+          <p className="text-sm text-neutral-500 mt-2">
+            Real-time coordinates of verified government/private trauma centers, licensed blood banks, and nearby universal donors with dynamic distance circles.
+          </p>
+        </div>
+        <SimulatedMap
+          activeRequest={emergencyRequests[0] || null}
+          onSelectFacility={(type) => {
+            if (type === 'hospital') handlePortalAccess('hospital');
+            else if (type === 'blood_bank') handlePortalAccess('blood_bank');
+            else handlePortalAccess('donor');
+          }}
+          onRequestBlood={() => handlePortalAccess('hospital')}
+        />
+      </section>
+
+      {/* 3C. 4-Way Real-Time Coordination Pipeline */}
+      <section id="four-way-coordination-pipeline" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+        <FourWayCoordinationDemo onNavigatePortal={(p) => handlePortalAccess(p as UserRole)} />
       </section>
 
       {/* 4. Live Emergency Grid Broadcast Stream (Active Chennai Requisitions) */}

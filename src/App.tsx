@@ -16,6 +16,8 @@ import { CompatibilityMatrixModal } from './components/common/CompatibilityMatri
 import { SupabaseConfigModal } from './components/setup/SupabaseConfigModal';
 import { TestRunnerModal } from './components/tests/TestRunnerModal';
 import { OfflineIndicator } from './components/common/OfflineIndicator';
+import { SimulatedMap } from './components/map/SimulatedMap';
+import { FourWayCoordinationDemo } from './components/demo/FourWayCoordinationDemo';
 import {
   Heart,
   Activity,
@@ -49,8 +51,8 @@ function BloodSyncApp() {
   const [registerRole, setRegisterRole] = useState<UserRole>('donor');
 
   const handleSelectTab = (tab: string) => {
-    if (tab === 'landing') {
-      setCurrentTab('landing');
+    if (tab === 'landing' || tab === 'map' || tab === 'demo') {
+      setCurrentTab(tab);
       return;
     }
 
@@ -130,6 +132,55 @@ function BloodSyncApp() {
             onOpenRegister={handleOpenRegister}
           />
         )}
+        {currentTab === 'map' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-black text-neutral-900 dark:text-white">
+                  Chennai Metro Live Telemetry Network
+                </h1>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  Spatial positioning of verified trauma hospitals, blood banks, and voluntary donor dispatch circles
+                </p>
+              </div>
+              <button
+                onClick={() => handleSelectTab('landing')}
+                className="text-xs font-bold text-neutral-500 hover:text-neutral-900 dark:hover:text-white px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800"
+              >
+                ← Back to Overview
+              </button>
+            </div>
+            <SimulatedMap
+              onSelectFacility={(type, id) => {
+                if (type === 'hospital') handleSelectTab('hospital');
+                else if (type === 'blood_bank') handleSelectTab('blood_bank');
+                else handleSelectTab('donor');
+              }}
+              onRequestBlood={() => handleSelectTab('hospital')}
+            />
+          </div>
+        )}
+        {currentTab === 'demo' && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-black text-neutral-900 dark:text-white">
+                  4-Way Real-Time Coordination Demonstration
+                </h1>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  Simulate live emergency broadcast, citizen donor pledge, blood bank reservation, and administrative audit sealing
+                </p>
+              </div>
+              <button
+                onClick={() => handleSelectTab('landing')}
+                className="text-xs font-bold text-neutral-500 hover:text-neutral-900 dark:hover:text-white px-3 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-800"
+              >
+                ← Back to Overview
+              </button>
+            </div>
+            <FourWayCoordinationDemo onNavigatePortal={(portal) => handleSelectTab(portal)} />
+          </div>
+        )}
         {isLoggedIn && currentTab === 'donor' && (currentUser.role === 'donor' || currentUser.role === 'admin') && (
           <DonorPortal />
         )}
@@ -144,7 +195,12 @@ function BloodSyncApp() {
         )}
 
         {/* Role Access Denied Card if logged-in user enters unauthorized portal */}
-        {isLoggedIn && currentTab !== 'landing' && currentUser.role !== currentTab && currentUser.role !== 'admin' && (
+        {isLoggedIn &&
+          currentTab !== 'landing' &&
+          currentTab !== 'map' &&
+          currentTab !== 'demo' &&
+          currentUser.role !== currentTab &&
+          currentUser.role !== 'admin' && (
           <div className="max-w-xl mx-auto my-16 p-8 text-center bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl animate-in fade-in duration-200">
             <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/80 text-amber-600 flex items-center justify-center mx-auto mb-4 shadow-sm">
               <ShieldAlert className="w-8 h-8" />
@@ -172,8 +228,8 @@ function BloodSyncApp() {
           </div>
         )}
 
-        {/* Strict Access Guard Card if unauthenticated visitor lands outside 'landing' */}
-        {!isLoggedIn && currentTab !== 'landing' && (
+        {/* Strict Access Guard Card if unauthenticated visitor lands outside public pages */}
+        {!isLoggedIn && currentTab !== 'landing' && currentTab !== 'map' && currentTab !== 'demo' && (
           <div className="max-w-xl mx-auto my-16 p-8 text-center bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl animate-in fade-in duration-200">
             <div className="w-16 h-16 rounded-2xl bg-red-100 dark:bg-red-950/80 text-red-600 flex items-center justify-center mx-auto mb-4 shadow-sm">
               <Lock className="w-8 h-8" />

@@ -22,6 +22,8 @@ import {
   FileText,
   User,
   ExternalLink,
+  Compass,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -157,6 +159,30 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                 <span>Live Crises</span>
+              </button>
+
+              <button
+                onClick={() => onSelectTab('map')}
+                className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  currentTab === 'map'
+                    ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 font-bold'
+                    : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                }`}
+              >
+                <Compass className="w-3.5 h-3.5 text-blue-500" />
+                <span>Live Map</span>
+              </button>
+
+              <button
+                onClick={() => onSelectTab('demo')}
+                className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  currentTab === 'demo'
+                    ? 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 font-bold'
+                    : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20" />
+                <span>4-Way Demo</span>
               </button>
 
               <button
@@ -460,19 +486,31 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           <button
+            onClick={() => onSelectTab('map')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-bold ${
+              currentTab === 'map' ? 'text-blue-600' : 'text-neutral-500 dark:text-neutral-400'
+            }`}
+          >
+            <Compass className="w-4 h-4 mb-0.5 text-blue-500" />
+            <span>Map</span>
+          </button>
+
+          <button
+            onClick={() => onSelectTab('demo')}
+            className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-bold ${
+              currentTab === 'demo' ? 'text-amber-600' : 'text-neutral-500 dark:text-neutral-400'
+            }`}
+          >
+            <Zap className="w-4 h-4 mb-0.5 text-amber-500" />
+            <span>4-Way</span>
+          </button>
+
+          <button
             onClick={() => handleScrollToSection('live-emergency-grid')}
             className="flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-bold text-neutral-500 dark:text-neutral-400"
           >
             <Radio className="w-4 h-4 mb-0.5 text-red-500" />
-            <span>Live Crises</span>
-          </button>
-
-          <button
-            onClick={() => setShowMatrix(true)}
-            className="flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-bold text-neutral-500 dark:text-neutral-400"
-          >
-            <Activity className="w-4 h-4 mb-0.5 text-rose-500" />
-            <span>RBC Rules</span>
+            <span>Crises</span>
           </button>
 
           {isLoggedIn ? (
