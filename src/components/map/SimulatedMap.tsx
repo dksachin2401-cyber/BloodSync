@@ -22,6 +22,7 @@ import {
   Moon,
   Locate,
   RefreshCw,
+  Zap,
 } from 'lucide-react';
 import {
   HospitalProfile,
@@ -46,27 +47,61 @@ interface SimulatedMapProps {
 
 type MapLayerType = 'dark' | 'streets' | 'satellite';
 
-const TILE_PROVIDERS: Record<MapLayerType, { url: string; attribution: string; maxZoom: number }> = {
+interface TileLayerConfig {
+  base: {
+    url: string;
+    attribution: string;
+    maxZoom: number;
+    maxNativeZoom?: number;
+  };
+  overlay?: {
+    url: string;
+    maxZoom: number;
+    maxNativeZoom?: number;
+  };
+}
+
+// 100% Free, NO API KEY required tile providers (ArcGIS Dark Gray Canvas, OSM, Esri World Imagery)
+const TILE_PROVIDERS: Record<MapLayerType, TileLayerConfig> = {
   dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-    maxZoom: 19,
+    base: {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+      attribution: '&copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+      maxZoom: 19,
+      maxNativeZoom: 16,
+    },
+    overlay: {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+      maxZoom: 19,
+      maxNativeZoom: 16,
+    },
   },
   streets: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    maxZoom: 19,
+    base: {
+      url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+      maxNativeZoom: 19,
+    },
   },
   satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community',
-    maxZoom: 18,
+    base: {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      attribution: '&copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+      maxZoom: 19,
+      maxNativeZoom: 18,
+    },
+    overlay: {
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+      maxZoom: 19,
+      maxNativeZoom: 18,
+    },
   },
 };
 
-// Chennai Center Coordinates (Central Railway / RGGGH corridor)
-const CHENNAI_CENTER: [number, number] = [13.065, 80.245];
-const DEFAULT_ZOOM = 12;
+// Chennai Center Coordinates
+const CHENNAI_CENTER: [number, number] = [13.060, 80.245];
+const DEFAULT_ZOOM = 13;
 
 export const SimulatedMap: React.FC<SimulatedMapProps> = ({
   activeRequest,
@@ -76,13 +111,14 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
   const { theme } = useTheme();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const activeTileLayersRef = useRef<L.Layer[]>([]);
   const markersGroupRef = useRef<L.LayerGroup | null>(null);
   const circleRef = useRef<L.Circle | null>(null);
   const routePolylineRef = useRef<L.Polyline | null>(null);
+  const initialFittedRef = useRef<boolean>(false);
 
   const [mapLayer, setMapLayer] = useState<MapLayerType>(theme === 'dark' ? 'dark' : 'streets');
-  const [radiusKm, setRadiusKm] = useState<number>(25);
+  const [radiusKm, setRadiusKm] = useState<number>(10);
   const [showHospitals, setShowHospitals] = useState<boolean>(true);
   const [showBloodBanks, setShowBloodBanks] = useState<boolean>(true);
   const [showDonors, setShowDonors] = useState<boolean>(true);
@@ -116,6 +152,36 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
     });
   }, [filterBloodGroup]);
 
+  // Apply tile layers based on chosen mapLayer
+  const applyTileLayers = (layerType: MapLayerType, map: L.Map) => {
+    // Remove previous tile layers
+    activeTileLayersRef.current.forEach((layer) => {
+      if (map.hasLayer(layer)) {
+        map.removeLayer(layer);
+      }
+    });
+    activeTileLayersRef.current = [];
+
+    const config = TILE_PROVIDERS[layerType];
+
+    // Add Base Layer
+    const baseLayer = L.tileLayer(config.base.url, {
+      attribution: config.base.attribution,
+      maxZoom: config.base.maxZoom,
+      maxNativeZoom: config.base.maxNativeZoom,
+    }).addTo(map);
+    activeTileLayersRef.current.push(baseLayer);
+
+    // Add Reference / Label Overlay if available
+    if (config.overlay) {
+      const overlayLayer = L.tileLayer(config.overlay.url, {
+        maxZoom: config.overlay.maxZoom,
+        maxNativeZoom: config.overlay.maxNativeZoom,
+      }).addTo(map);
+      activeTileLayersRef.current.push(overlayLayer);
+    }
+  };
+
   // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -124,31 +190,37 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
       const map = L.map(mapContainerRef.current, {
         center: CHENNAI_CENTER,
         zoom: DEFAULT_ZOOM,
-        zoomControl: false, // We'll add custom positioned zoom control
+        zoomControl: false,
         attributionControl: true,
       });
 
       // Add Zoom Control at bottom right
       L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      // Create Tile Layer
-      const initialProvider = TILE_PROVIDERS[mapLayer];
-      const tileLayer = L.tileLayer(initialProvider.url, {
-        attribution: initialProvider.attribution,
-        maxZoom: initialProvider.maxZoom,
-      }).addTo(map);
+      // Create Tile Layers
+      applyTileLayers(mapLayer, map);
 
       // Markers LayerGroup
       const markersGroup = L.layerGroup().addTo(map);
 
       mapInstanceRef.current = map;
-      tileLayerRef.current = tileLayer;
       markersGroupRef.current = markersGroup;
 
-      // Invalidate size after layout rendering
+      // Invalidate size and auto-fit after DOM mounting
       setTimeout(() => {
         map.invalidateSize();
-      }, 300);
+        if (!initialFittedRef.current) {
+          initialFittedRef.current = true;
+          const allCoords: [number, number][] = [
+            ...INITIAL_HOSPITALS.map((h) => [h.coordinates?.latitude || 0, h.coordinates?.longitude || 0] as [number, number]),
+            ...INITIAL_BLOOD_BANKS.map((b) => [b.coordinates?.latitude || 0, b.coordinates?.longitude || 0] as [number, number]),
+          ].filter(([lat, lng]) => lat !== 0 && lng !== 0);
+
+          if (allCoords.length > 0) {
+            map.fitBounds(L.latLngBounds(allCoords), { padding: [50, 50], maxZoom: 13 });
+          }
+        }
+      }, 350);
     }
 
     return () => {
@@ -162,18 +234,7 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
   // Update Tile Layer when layer type changes
   useEffect(() => {
     if (!mapInstanceRef.current) return;
-    const provider = TILE_PROVIDERS[mapLayer];
-
-    if (tileLayerRef.current) {
-      mapInstanceRef.current.removeLayer(tileLayerRef.current);
-    }
-
-    const newTileLayer = L.tileLayer(provider.url, {
-      attribution: provider.attribution,
-      maxZoom: provider.maxZoom,
-    }).addTo(mapInstanceRef.current);
-
-    tileLayerRef.current = newTileLayer;
+    applyTileLayers(mapLayer, mapInstanceRef.current);
   }, [mapLayer]);
 
   // Recalculate & Render Markers, Radius Circle, and Routes
@@ -213,13 +274,13 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
           <div class="relative flex items-center justify-center cursor-pointer group">
             ${
               isFocus
-                ? '<div class="absolute -inset-2 rounded-full bg-red-600/30 animate-ping"></div>'
+                ? '<div class="absolute -inset-2.5 rounded-full bg-red-600/35 animate-ping"></div>'
                 : ''
             }
-            <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-red-600 to-rose-500 text-white flex items-center justify-center font-black shadow-lg shadow-red-600/40 border-2 border-white dark:border-neutral-900 group-hover:scale-110 transition-transform">
-              <span class="text-sm">+</span>
+            <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-red-600 to-rose-500 text-white flex items-center justify-center font-black shadow-xl shadow-red-600/50 border-2 border-white dark:border-neutral-900 group-hover:scale-115 transition-transform">
+              <span class="text-base leading-none font-bold">+</span>
             </div>
-            <div class="absolute -bottom-5 whitespace-nowrap px-1.5 py-0.5 rounded-md bg-neutral-950/90 text-white text-[9px] font-bold shadow-md border border-neutral-700/60 pointer-events-none">
+            <div class="absolute -bottom-5.5 whitespace-nowrap px-1.5 py-0.5 rounded-md bg-neutral-950/95 text-white text-[9px] font-bold shadow-lg border border-neutral-700/60 pointer-events-none">
               ${hosp.hospitalName.split(' ')[0]}
             </div>
           </div>
@@ -227,7 +288,7 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
 
         const customIcon = L.divIcon({
           html: iconHtml,
-          className: 'custom-hospital-marker',
+          className: '!bg-transparent !border-0 custom-hospital-marker',
           iconSize: [36, 36],
           iconAnchor: [18, 18],
         });
@@ -254,13 +315,13 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
 
         const iconHtml = `
           <div class="relative flex items-center justify-center cursor-pointer group">
-            <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center font-bold shadow-lg shadow-blue-600/40 border-2 border-white dark:border-neutral-900 group-hover:scale-110 transition-transform">
+            <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center font-bold shadow-xl shadow-blue-600/50 border-2 border-white dark:border-neutral-900 group-hover:scale-115 transition-transform">
               <span class="text-xs">■</span>
             </div>
-            <div class="absolute -top-2 -right-2 px-1 rounded-full bg-blue-900 text-blue-200 text-[8px] font-extrabold border border-blue-400">
+            <div class="absolute -top-2 -right-2 px-1.5 py-0.2 rounded-full bg-blue-900 text-blue-200 text-[8px] font-extrabold border border-blue-400 shadow-sm">
               ${bankStock}u
             </div>
-            <div class="absolute -bottom-5 whitespace-nowrap px-1.5 py-0.5 rounded-md bg-neutral-950/90 text-white text-[9px] font-bold shadow-md border border-neutral-700/60 pointer-events-none">
+            <div class="absolute -bottom-5.5 whitespace-nowrap px-1.5 py-0.5 rounded-md bg-neutral-950/95 text-white text-[9px] font-bold shadow-lg border border-neutral-700/60 pointer-events-none">
               ${bank.bloodBankName.split(' ')[0]}
             </div>
           </div>
@@ -268,7 +329,7 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
 
         const customIcon = L.divIcon({
           html: iconHtml,
-          className: 'custom-bank-marker',
+          className: '!bg-transparent !border-0 custom-bank-marker',
           iconSize: [32, 32],
           iconAnchor: [16, 16],
         });
@@ -303,7 +364,7 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
 
         const customIcon = L.divIcon({
           html: iconHtml,
-          className: 'custom-donor-marker',
+          className: '!bg-transparent !border-0 custom-donor-marker',
           iconSize: [24, 24],
           iconAnchor: [12, 12],
         });
@@ -324,27 +385,25 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
       routePolylineRef.current = null;
     }
 
-    if (activeRequest) {
-      const nearestBank = INITIAL_BLOOD_BANKS[0];
-      if (nearestBank?.coordinates && focusHospital.coordinates) {
-        const routeCoords: [number, number][] = [
-          [focusHospital.coordinates.latitude, focusHospital.coordinates.longitude],
-          [
-            (focusHospital.coordinates.latitude + nearestBank.coordinates.latitude) / 2 + 0.005,
-            (focusHospital.coordinates.longitude + nearestBank.coordinates.longitude) / 2 - 0.008,
-          ],
-          [nearestBank.coordinates.latitude, nearestBank.coordinates.longitude],
-        ];
+    const nearestBank = INITIAL_BLOOD_BANKS[0];
+    if (nearestBank?.coordinates && focusHospital.coordinates) {
+      const routeCoords: [number, number][] = [
+        [focusHospital.coordinates.latitude, focusHospital.coordinates.longitude],
+        [
+          (focusHospital.coordinates.latitude + nearestBank.coordinates.latitude) / 2 + 0.004,
+          (focusHospital.coordinates.longitude + nearestBank.coordinates.longitude) / 2 - 0.006,
+        ],
+        [nearestBank.coordinates.latitude, nearestBank.coordinates.longitude],
+      ];
 
-        const routeLine = L.polyline(routeCoords, {
-          color: '#10b981',
-          weight: 4,
-          opacity: 0.85,
-          dashArray: '8, 8',
-        }).addTo(map);
+      const routeLine = L.polyline(routeCoords, {
+        color: '#10b981',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '8, 8',
+      }).addTo(map);
 
-        routePolylineRef.current = routeLine;
-      }
+      routePolylineRef.current = routeLine;
     }
   }, [
     focusHospital,
@@ -367,6 +426,7 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
     const allCoords: [number, number][] = [
       ...INITIAL_HOSPITALS.map((h) => [h.coordinates?.latitude || 0, h.coordinates?.longitude || 0] as [number, number]),
       ...INITIAL_BLOOD_BANKS.map((b) => [b.coordinates?.latitude || 0, b.coordinates?.longitude || 0] as [number, number]),
+      ...filteredDonors.map((d) => [d.coordinates?.latitude || 0, d.coordinates?.longitude || 0] as [number, number]),
     ].filter(([lat, lng]) => lat !== 0 && lng !== 0);
 
     if (allCoords.length > 0) {
@@ -374,8 +434,27 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
     }
   };
 
+  const handleFocusEmergency = () => {
+    if (!mapInstanceRef.current) return;
+    const focusLat = focusHospital.coordinates?.latitude || 13.0827;
+    const focusLng = focusHospital.coordinates?.longitude || 80.2777;
+    mapInstanceRef.current.flyTo([focusLat, focusLng], 15, { duration: 1.2 });
+  };
+
   return (
     <div className="bg-white dark:bg-neutral-900 rounded-3xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col">
+      {/* Global Map Styles Override for Leaflet */}
+      <style>{`
+        .leaflet-div-icon {
+          background: transparent !important;
+          border: none !important;
+        }
+        .leaflet-container {
+          background: #0f172a !important;
+          font-family: inherit;
+        }
+      `}</style>
+
       {/* Map Header & Interactive Controls Bar */}
       <div className="p-4 sm:p-5 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/90 dark:bg-neutral-800/50 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -388,11 +467,11 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
                 Live Geographic Telemetry Map
               </h3>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> GPS Telemetry
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> GPS Live
               </span>
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Interactive high-resolution street, terrain & satellite mapping of Tamil Nadu transfusion facilities
+              Interactive street, terrain & satellite mapping of Tamil Nadu emergency hubs
             </p>
           </div>
         </div>
@@ -408,7 +487,7 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
                   ? 'bg-neutral-900 text-white dark:bg-neutral-700'
                   : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
               }`}
-              title="Dark Command Center Map"
+              title="ArcGIS Dark Command Center Map"
             >
               <Moon className="w-3.5 h-3.5" /> Dark
             </button>
@@ -419,7 +498,7 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
                   ? 'bg-neutral-900 text-white dark:bg-neutral-700'
                   : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
               }`}
-              title="OpenStreetMap Street View"
+              title="OpenStreetMap Street Navigation"
             >
               <MapIcon className="w-3.5 h-3.5" /> Streets
             </button>
@@ -430,7 +509,7 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
                   ? 'bg-blue-600 text-white'
                   : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
               }`}
-              title="True Satellite Terrain View"
+              title="Esri True Satellite Imagery"
             >
               <Satellite className="w-3.5 h-3.5" /> Satellite
             </button>
@@ -466,11 +545,11 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
               onChange={(e) => setRadiusKm(Number(e.target.value))}
               className="bg-transparent font-bold text-neutral-900 dark:text-white outline-none cursor-pointer"
             >
-              <option value={10}>10 km (Immediate)</option>
-              <option value={25}>25 km (Metro Core)</option>
-              <option value={50}>50 km (Greater Chennai)</option>
-              <option value={100}>100 km (Regional Tier 1)</option>
-              <option value={250}>250 km (North TN Grid)</option>
+              <option value={5}>5 km (Immediate)</option>
+              <option value={10}>10 km (Metro Core)</option>
+              <option value={25}>25 km (Greater Chennai)</option>
+              <option value={50}>50 km (Regional Tier 1)</option>
+              <option value={100}>100 km (North TN Grid)</option>
             </select>
           </div>
 
@@ -511,33 +590,40 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
       </div>
 
       {/* Real Map Canvas Container */}
-      <div className="relative w-full aspect-video min-h-[500px] max-h-[640px] bg-neutral-950 overflow-hidden">
+      <div className="relative w-full aspect-video min-h-[520px] max-h-[640px] bg-neutral-950 overflow-hidden">
         {/* Leaflet Map DOM Element */}
         <div ref={mapContainerRef} className="w-full h-full z-10" />
 
         {/* Quick Navigation Floating Buttons (Top Right) */}
         <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
           <button
+            onClick={handleFocusEmergency}
+            className="px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+            title="Focus on Active Trauma Center at Street Level"
+          >
+            <Zap className="w-3.5 h-3.5" /> Focus Trauma Center
+          </button>
+          <button
             onClick={handleRecenterChennai}
-            className="p-2.5 rounded-xl bg-white/90 dark:bg-neutral-900/90 backdrop-blur-md border border-neutral-200 dark:border-neutral-700 shadow-xl text-neutral-700 dark:text-neutral-200 hover:text-red-600 hover:bg-white dark:hover:bg-neutral-800 cursor-pointer transition-all"
+            className="p-2.5 rounded-xl bg-white/90 dark:bg-neutral-900/90 backdrop-blur-md border border-neutral-200 dark:border-neutral-700 shadow-xl text-neutral-700 dark:text-neutral-200 hover:text-red-600 hover:bg-white dark:hover:bg-neutral-800 cursor-pointer transition-all self-end"
             title="Recenter on Chennai City Core"
           >
             <Locate className="w-4 h-4" />
           </button>
           <button
             onClick={handleFitBounds}
-            className="p-2.5 rounded-xl bg-white/90 dark:bg-neutral-900/90 backdrop-blur-md border border-neutral-200 dark:border-neutral-700 shadow-xl text-neutral-700 dark:text-neutral-200 hover:text-blue-600 hover:bg-white dark:hover:bg-neutral-800 cursor-pointer transition-all"
-            title="Fit Bounds to All Facilities"
+            className="p-2.5 rounded-xl bg-white/90 dark:bg-neutral-900/90 backdrop-blur-md border border-neutral-200 dark:border-neutral-700 shadow-xl text-neutral-700 dark:text-neutral-200 hover:text-blue-600 hover:bg-white dark:hover:bg-neutral-800 cursor-pointer transition-all self-end"
+            title="Fit Bounds to All Transfusion Hubs"
           >
             <Maximize2 className="w-4 h-4" />
           </button>
         </div>
 
         {/* Floating Facility Legend (Bottom Left) */}
-        <div className="absolute bottom-4 left-4 z-20 bg-neutral-950/90 backdrop-blur-md p-3.5 rounded-2xl border border-neutral-800 text-xs text-white shadow-2xl space-y-1.5 max-w-[220px]">
+        <div className="absolute bottom-4 left-4 z-20 bg-neutral-950/90 backdrop-blur-md p-3.5 rounded-2xl border border-neutral-800 text-xs text-white shadow-2xl space-y-1.5 max-w-[230px]">
           <div className="font-bold text-[10px] uppercase tracking-wider text-neutral-400 mb-1 flex items-center justify-between">
             <span>Facility Telemetry</span>
-            <span className="font-mono text-neutral-500">TN-CH</span>
+            <span className="font-mono text-emerald-400">GPS ONLINE</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-4 h-4 rounded-lg bg-red-600 flex items-center justify-center text-[11px] text-white font-black shadow-xs">
@@ -555,14 +641,12 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
             <span className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center text-[9px] text-white font-bold shadow-xs">
               ●
             </span>
-            <span className="text-[11px]">Verified Voluntary Donor</span>
+            <span className="text-[11px]">Verified Citizen Donor</span>
           </div>
-          {activeRequest && (
-            <div className="pt-2 border-t border-neutral-800 text-[10px] text-emerald-400 flex items-center gap-1.5 font-semibold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              Live Emergency Dispatch Corridor
-            </div>
-          )}
+          <div className="pt-2 border-t border-neutral-800 text-[10px] text-emerald-400 flex items-center gap-1.5 font-semibold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            Active Dispatch Corridor
+          </div>
         </div>
 
         {/* Selected Marker Details Flyout (Bottom Right) */}
@@ -586,7 +670,7 @@ export const SimulatedMap: React.FC<SimulatedMapProps> = ({
               </span>
               <button
                 onClick={() => setSelectedFacility(null)}
-                className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 font-bold p-1"
+                className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 font-bold p-1 cursor-pointer"
               >
                 ✕
               </button>
